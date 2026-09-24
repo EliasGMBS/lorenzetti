@@ -10,6 +10,7 @@ from GaugiKernel import LoggingLevel, get_argparser_formatter
 from GaugiKernel import ComponentAccumulator
 from RootStreamBuilder import RootStreamESDReader, recordable
 from CaloClusterBuilder import CaloClusterMaker
+from PeakScanSeedBuilder import PeakScanSeedMaker
 from CaloRingsBuilder import CaloRingsBuilderCfg
 from EgammaBuilder import ElectronBuilderCfg
 from RootStreamBuilder import RootStreamAODMaker
@@ -25,6 +26,8 @@ Purpose: Executes the offline reconstruction chain.
 Usage:
     reco_trf.py -i input.ESD.root -o output.AOD.root
 """
+CLUSTER_MODES = ("truth", "peakscan", "topo")
+
 TOPOLOGY_MAP = {
     "doStdRings": ("std", "Rings"),
     "doCornerRings": ("corner", "CornerRings"),
@@ -66,7 +69,6 @@ def parse_args():
         default="''",
         help="The preexec command",
     )
-
     return merge_args(parser)
 
 
@@ -92,7 +94,11 @@ def main(
         logging_level (str): Logging verbosity.
         input_file (str | Path): Path to input ESD file.
         output_file (str | Path): Path to output AOD file.
-        command (str): Optional command to execute before the sequence.
+        command (str): Optional command to execute before the sequence (e.g. to set the flags).
+
+    The clusters are found according to flags.ClusterMode: 'truth' (truth seeds),
+    'peakscan' (energy peaks scanned from all the cells, see flags.PeakScan*) or
+    'topo' (topological clustering, not implemented yet).
     """
     if isinstance(input_file, Path):
         input_file = str(input_file)
@@ -102,6 +108,11 @@ def main(
     outputLevel = LoggingLevel.toC(logging_level)
 
     exec(command)
+
+    if flags.ClusterMode not in CLUSTER_MODES:
+        raise ValueError(f"ClusterMode '{flags.ClusterMode}' is not valid, use one of {CLUSTER_MODES}.")
+    if flags.ClusterMode == "topo":
+        raise NotImplementedError("ClusterMode 'topo' is not implemented yet.")
 
     acc = ComponentAccumulator("ComponentAccumulator", output_file)
 
@@ -117,10 +128,22 @@ def main(
     )
     ESD.merge(acc)
 
+    seeds_key = recordable("Seeds")
+    if flags.ClusterMode == "peakscan":
+        seeds_key = recordable("PeakScanSeeds")
+        acc += PeakScanSeedMaker(
+            "PeakScanSeedMaker",
+            InputCellsKey=recordable("Cells"),
+            OutputSeedsKey=seeds_key,
+            EnergyThreshold=flags.PeakScanEnergyThreshold,
+            MinDistanceDR=flags.PeakScanMinDR,
+            OutputLevel=outputLevel,
+        )
+
     cluster = CaloClusterMaker(
         "CaloClusterMaker",
         InputCellsKey=recordable("Cells"),
-        InputSeedsKey=recordable("Seeds"),
+        InputSeedsKey=seeds_key,
         # output as
         OutputClusterKey=recordable("Clusters"),
         # other configs
@@ -131,7 +154,7 @@ def main(
     cluster_truth = CaloClusterMaker(
         "CaloClusterMaker_Truth",
         InputCellsKey=recordable("TruthCells"),
-        InputSeedsKey=recordable("Seeds"),
+        InputSeedsKey=seeds_key,
         # output as
         OutputClusterKey=recordable("TruthClusters"),
         # other configs

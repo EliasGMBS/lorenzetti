@@ -91,6 +91,7 @@ add_subdirectory( geometry )
 
 add_subdirectory( reconstruction/calorimeter/CaloCellBuilder )
 add_subdirectory( reconstruction/calorimeter/CaloClusterBuilder )
+add_subdirectory( reconstruction/calorimeter/PeakScanSeedBuilder )
 add_subdirectory( reconstruction/calorimeter/CaloRingsBuilder )
 add_subdirectory( reconstruction/calorimeter/CaloHitBuilder )
 
@@ -126,6 +127,7 @@ add_library(lorenzetti SHARED
   $<TARGET_OBJECTS:CaloHitBuilder>
   $<TARGET_OBJECTS:CaloCellBuilder>
   $<TARGET_OBJECTS:CaloClusterBuilder>
+  $<TARGET_OBJECTS:PeakScanSeedBuilder>
   $<TARGET_OBJECTS:CaloRingsBuilder>
   $<TARGET_OBJECTS:RootStreamBuilder>
   $<TARGET_OBJECTS:EgammaBuilder>

@@ -2,6 +2,7 @@ __all__ = ["RootStreamHITFlags", "RootStreamESDFlags", "RootStreamAODFlags"]
 
 
 from GaugiKernel import EnumStringification
+from GaugiKernel.constants import GeV
 
 
 class RootStreamHITFlags(EnumStringification):
@@ -36,3 +37,6 @@ class RootStreamAODFlags(EnumStringification):
     CustomRingsShiftPhi: list = [0]
     StripsAxis = 0
 
+    ClusterMode = "truth"
+    PeakScanEnergyThreshold = 1 * GeV
+    PeakScanMinDR = 0.4
