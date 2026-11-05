@@ -56,7 +56,7 @@ def parse_args():
 
     parser.add_argument('--save-all-cells', action='store_true',
                         dest='save_all_cells', required=False,
-                        help="Save all cells into the ESD file, without cropping to the truth-particle RoI window.")
+                        help="Save all digitized cells into the ESD file, without cropping to the truth-particle RoI window.")
 
 
     parser = merge_args(parser)
@@ -88,8 +88,8 @@ def main(events : List[int],
         pre_init (str): Hook for pre-initialization code.
         pre_exec (str): Hook for pre-execution code.
         post_exec (str): Hook for post-execution code.
-        save_all_cells (bool): If True, saves all cells regardless of the truth-particle
-            Region of Interest (RoI) window used by RootStreamESDMaker.
+        save_all_cells (bool): If True, saves all digitized cells (HIT cells, including
+            KeepCells), regardless of the truth-particle RoI window used by RootStreamESDMaker.
     """
 
     if isinstance(input_file, Path):
@@ -134,10 +134,9 @@ def main(events : List[int],
                        InputSeedsKey=recordable("Seeds"),
                        OutputLevel=outputLevel)
     if save_all_cells:
-        # Window large enough to always cover the full eta [-4.9, 4.9] / phi [-pi, pi] range,
-        # regardless of where the truth particle sits.
-        esd_kwargs["EtaWindow"] = 30.0
-        esd_kwargs["PhiWindow"] = 8.0
+        # Save every digitized cell (HIT cells, including KeepCells),
+        # independently of the truth particles
+        esd_kwargs["OnlyRoI"] = False
 
     ESD = RootStreamESDMaker("RootStreamESDMaker", **esd_kwargs)
     acc += ESD
