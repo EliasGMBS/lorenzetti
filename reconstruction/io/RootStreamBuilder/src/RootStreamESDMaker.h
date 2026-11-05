@@ -67,7 +67,7 @@ class RootStreamESDMaker : public Gaugi::Algorithm
     std::string m_outputCellsTruthKey;
        
     float m_etaWindow, m_phiWindow;
-
+    bool m_onlyRoI;
 
     int m_outputLevel;
 };

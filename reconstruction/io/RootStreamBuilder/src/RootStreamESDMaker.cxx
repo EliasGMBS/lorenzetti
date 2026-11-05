@@ -23,11 +23,14 @@ using namespace Gaugi;
  * @brief Serializes reconstruction objects to a ROOT file (ESD format).
  * 
  * Similar to `RootStreamAODMaker`, but focuses on Event Summary Data (ESD),
- * which typically includes calorimeter cells. It supports filtering cells
- * within a Region of Interest (RoI) around truth particles to reduce file size.
+ * which typically includes calorimeter cells. By default (OnlyRoI=true) it
+ * saves only cells within a Region of Interest (RoI) around truth particles
+ * to reduce file size. With OnlyRoI=false, all digitized cells are saved.
  * 
  * Properties:
  * - Eta/PhiWindow: Size of the RoI to save cells around truth particles.
+ * - OnlyRoI: If true (default), save only cells inside the RoI; if false, save all
+ *   digitized cells (cells present in the HIT, including KeepCells).
  */
 RootStreamESDMaker::RootStreamESDMaker( std::string name ) : 
   IMsgService(name),
@@ -47,6 +50,7 @@ RootStreamESDMaker::RootStreamESDMaker( std::string name ) :
   declareProperty( "NtupleName"         , m_ntupleName="CollectionTree"     );
   declareProperty( "EtaWindow"          , m_etaWindow=0.6                   );
   declareProperty( "PhiWindow"          , m_phiWindow=0.6                   );
+  declareProperty( "OnlyRoI"            , m_onlyRoI=true                    );
 
 }
 
@@ -158,8 +162,9 @@ void RootStreamESDMaker::InitBranch(TTree* fChain, std::string branch_name, T* p
  * @brief Serializes the ESD content.
  * 
  * Saves EventInfo, Seeds, TruthParticles, and CaloCells.
- * CaloCells are filtered: only cells within `EtaWindow` x `PhiWindow` of any
- * TruthParticle are saved. It also saves the `CaloDetDescriptor` for each saved cell
+ * CaloCells are filtered when OnlyRoI is true: only cells within `EtaWindow` x
+ * `PhiWindow` of any TruthParticle are saved. With OnlyRoI=false, all digitized cells are saved.
+ * It also saves the `CaloDetDescriptor` for each saved cell
  * to allow full reconstruction geometry restoration.
  */
 StatusCode RootStreamESDMaker::serialize( EventContext &ctx ) const
@@ -249,55 +254,57 @@ StatusCode RootStreamESDMaker::serialize( EventContext &ctx ) const
       cell_truth_map[cell->descriptor()->hash()] = cell;
     }
 
-    std::map<unsigned long int,const xAOD::CaloCell*> cell_map;
-
-    for (const auto par : **particles.ptr() )
+    // NOTE: cells are the outer loop, so each cell is visited only once.
+    // This removes the need for a duplication check when RoIs overlap.
+    for (const auto cell : **container.ptr() )
     {
-        //MSG_DEBUG("New particle...");
-        for (const auto cell : **container.ptr() ){
+        const xAOD::CaloDetDescriptor *descriptor = cell->descriptor();
 
-            const xAOD::CaloDetDescriptor *descriptor = cell->descriptor();
-            float deltaEta = std::abs( par->eta() - descriptor->eta());
-            float deltaPhi = std::abs( CaloPhiRange::diff(par->phi(), descriptor->phi()) );
-
-            if ( deltaEta < m_etaWindow/2 && deltaPhi < m_phiWindow/2 )
+        // Decide whether this cell is written to the ESD
+        if ( m_onlyRoI )
+        {
+            bool inRoI = false;
+            for (const auto par : **particles.ptr() )
             {
+                float deltaEta = std::abs( par->eta() - descriptor->eta());
+                float deltaPhi = std::abs( CaloPhiRange::diff(par->phi(), descriptor->phi()) );
 
-                // NOTE: avoid cell duplication given RoI superposition
-                if ( cell_map.count(descriptor->hash())){
-                  //MSG_WARNING("Cell already exists for cell " << descriptor->hash() );
-                  continue;
+                if ( deltaEta < m_etaWindow/2 && deltaPhi < m_phiWindow/2 ){
+                    inRoI = true;
+                    break; // one matching particle is enough
                 }
-                cell_map.insert( std::make_pair( descriptor->hash(), cell ) );
+            }// loop over truth particles
 
-                if ( !cell_truth_map.count(descriptor->hash())){
-                  MSG_WARNING("Cell truth not found for cell " << descriptor->hash() );
-                  continue;
-                }
-
-                const xAOD::CaloCell* cell_truth = cell_truth_map[descriptor->hash()];
-                xAOD::CaloCell_t cell_truth_t;
-                xAOD::CaloCellConverter cell_truth_cnv;
-                cell_truth_cnv.convert(cell_truth, cell_truth_t);
-
-                xAOD::CaloCell_t cell_t;
-                xAOD::CaloCellConverter cell_cnv;
-                cell_cnv.convert(cell, cell_t);
-
-
-                xAOD::CaloDetDescriptor_t descriptor_t;
-                xAOD::CaloDetDescriptorConverter descriptor_cnv;
-                descriptor_cnv.convert( descriptor, descriptor_t);
-
-                container_cells->push_back(cell_t);
-                container_cells_truth->push_back(cell_truth_t);
-                container_descriptor->push_back(descriptor_t);
-
-            }// check if cell is inside of the window
+            if ( !inRoI ) continue; // outside every RoI: skip this cell
+        }
         
-        }// loop over all cells
+        // Without RoI filtering, skip cells that were not digitized
+        // (not present in the HIT: no pulse and no noise)
+        if ( !m_onlyRoI && descriptor->pulse().empty() ) continue;
 
-    }// loop over all seeds
+        if ( !cell_truth_map.count(descriptor->hash())){
+            MSG_WARNING("Cell truth not found for cell " << descriptor->hash() );
+            continue;
+        }
+
+        const xAOD::CaloCell* cell_truth = cell_truth_map[descriptor->hash()];
+        xAOD::CaloCell_t cell_truth_t;
+        xAOD::CaloCellConverter cell_truth_cnv;
+        cell_truth_cnv.convert(cell_truth, cell_truth_t);
+
+        xAOD::CaloCell_t cell_t;
+        xAOD::CaloCellConverter cell_cnv;
+        cell_cnv.convert(cell, cell_t);
+
+        xAOD::CaloDetDescriptor_t descriptor_t;
+        xAOD::CaloDetDescriptorConverter descriptor_cnv;
+        descriptor_cnv.convert( descriptor, descriptor_t);
+
+        container_cells->push_back(cell_t);
+        container_cells_truth->push_back(cell_truth_t);
+        container_descriptor->push_back(descriptor_t);
+
+    }// loop over all cells
 
   }
 
