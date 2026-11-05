@@ -66,18 +66,37 @@ Here is an overview of the repository structure:
 
 ## 🚀 Installation
 
-The recommended way to use Lorenzetti is via pre-built container images (**Docker** or **Singularity**), which come with all dependencies pre-installed.
+The recommended way to use Lorenzetti is via pre-built container images (**Docker** or **Singularity**), which come with all dependencies pre-installed. Installation is a **two-step flow, not two alternative methods**: Step 1 starts the container, Step 2 builds Lorenzetti *inside* that same container.
 
-### Singularity (Recommended)
+> ⚠️ **Minimum Singularity version: 4.3.** Users have reported that the container image fails to run under Singularity 4.0; upgrading to 4.3 or later resolved it. Check your version with `singularity --version` before pulling the image.
+
+> ⚠️ **Pre-existing ROOT/Geant4 installations can conflict.** `source build/lzt_setup.sh` only *prepends* to `PATH`/`LD_LIBRARY_PATH`/`PYTHONPATH` — it does not clear variables set elsewhere. If your shell's startup file (`.bashrc`, `.bash_profile`, etc.) already exports `ROOTSYS`, `G4*` variables, or points `PATH`/`LD_LIBRARY_PATH` at a different ROOT/Geant4 install, remove that setup (or use a clean shell) before entering the container — otherwise you may see unexplained import or library-version errors.
+
+### Step 1 — Start the container
+
+**Singularity (Recommended)**
 
 ```bash
 singularity pull docker://lorenzetti/lorenzetti:latest
 singularity run lorenzetti_latest.sif
 ```
 
-### Manual Build
+**Docker (Alternative)**
 
-For development, you can clone and build the source inside the container:
+Singularity is recommended because it doesn't require root privileges, which makes it the only practical option on most shared/HPC clusters. If you're on your own machine and prefer Docker instead:
+
+```bash
+docker pull lorenzetti/lorenzetti:latest
+docker run -it --rm \
+  --name lorenzetti_session \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  lorenzetti/lorenzetti:latest
+```
+
+### Step 2 — Manual Build (run *inside* the container from Step 1)
+
+Once you are inside the running container, clone and build the source:
 
 ```bash
 git clone https://github.com/lorenzetti-ufrj-br/lorenzetti.git && cd lorenzetti
@@ -85,13 +104,13 @@ make
 source build/lzt_setup.sh
 ```
 
-📄 **Full Installation Guide**: [docs/installation.md](docs/installation.md)
+📄 **Full Installation Guide**: [notebooks/installation.md](notebooks/installation.md)
 
 ### 💻 macOS (Apple Silicon)
 
 > 💡 **Prerequisite:** Lorenzetti requires an `x86_64` architecture. Using **[OrbStack](https://orbstack.dev/)** (`brew install orbstack`) instead of Docker Desktop is strongly recommended for much faster Rosetta 2 emulation (_OrbStack Settings > System > Use Rosetta to run Intel code_).
 
-Create a local workspace folder and run the container (`--platform linux/amd64` forces Rosetta emulation):
+Create a local workspace folder and run the container — same as the Docker option in Step 1, plus `--platform linux/amd64` to force Rosetta emulation:
 
 ```bash
 mkdir -p ~/lorenzetti_work
@@ -101,11 +120,10 @@ docker run --platform linux/amd64 -it --rm \
   --name lorenzetti_session \
   -v "$PWD:/workspace" \
   -w /workspace \
-  lorenzetti/lorenzetti:latest\
-
+  lorenzetti/lorenzetti:latest
 ```
 
-Once inside the container, proceed with the **Manual Build** instructions above to clone the repository into /workspace, compile, and load the environment.
+Once inside the container, proceed with **Step 2 — Manual Build** above to clone the repository into /workspace, compile, and load the environment.
 
 ## 📚 Tutorials
 

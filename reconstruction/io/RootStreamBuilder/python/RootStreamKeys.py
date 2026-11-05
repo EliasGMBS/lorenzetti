@@ -13,6 +13,8 @@ valid_keys = [
     "TruthClusters",
     "Particles",
     "TruthParticles",
+    # PeakScanSeedMaker
+    "PeakScanSeeds",
     # CaloRingsBuilder
     "Rings",
     "RingsSigmaNoise",

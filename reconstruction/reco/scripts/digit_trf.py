@@ -54,7 +54,11 @@ def parse_args():
                         dest='post_exec', required=False, default="''",
                         help="The postexec command")
 
-   
+    parser.add_argument('--save-all-cells', action='store_true',
+                        dest='save_all_cells', required=False,
+                        help="Save all cells into the ESD file, without cropping to the truth-particle RoI window.")
+
+
     parser = merge_args(parser)
 
     return parser
@@ -67,6 +71,7 @@ def main(events : List[int],
          pre_init: str,
          pre_exec: str,
          post_exec: str,
+         save_all_cells: bool = False,
         ):
     """
     Main function for the digitization process.
@@ -83,6 +88,8 @@ def main(events : List[int],
         pre_init (str): Hook for pre-initialization code.
         pre_exec (str): Hook for pre-execution code.
         post_exec (str): Hook for post-execution code.
+        save_all_cells (bool): If True, saves all cells regardless of the truth-particle
+            Region of Interest (RoI) window used by RootStreamESDMaker.
     """
 
     if isinstance(input_file, Path):
@@ -120,13 +127,19 @@ def main(events : List[int],
     )
     calorimeter.merge(acc)
 
-    ESD = RootStreamESDMaker("RootStreamESDMaker",
-                             InputCellsKey=recordable("Cells"),
-                             InputCellsTruthKey=recordable("TruthCells"),
-                             InputEventKey=recordable("Events"),
-                             InputTruthKey=recordable("Particles"),
-                             InputSeedsKey=recordable("Seeds"),
-                             OutputLevel=outputLevel)
+    esd_kwargs = dict(InputCellsKey=recordable("Cells"),
+                       InputCellsTruthKey=recordable("TruthCells"),
+                       InputEventKey=recordable("Events"),
+                       InputTruthKey=recordable("Particles"),
+                       InputSeedsKey=recordable("Seeds"),
+                       OutputLevel=outputLevel)
+    if save_all_cells:
+        # Window large enough to always cover the full eta [-4.9, 4.9] / phi [-pi, pi] range,
+        # regardless of where the truth particle sits.
+        esd_kwargs["EtaWindow"] = 30.0
+        esd_kwargs["PhiWindow"] = 8.0
+
+    ESD = RootStreamESDMaker("RootStreamESDMaker", **esd_kwargs)
     acc += ESD
     
     exec(pre_exec)
@@ -145,9 +158,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args = update_args(args)
     pool  = create_parallel_job(args)
-    pool( main, 
+    pool( main,
          logging_level    = args.output_level,
          pre_init         = args.pre_init,
          pre_exec         = args.pre_exec,
          post_exec        = args.post_exec,
+         save_all_cells   = args.save_all_cells,
          )
